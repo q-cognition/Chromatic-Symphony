@@ -113,6 +113,7 @@
             gap: 25px;
             flex-wrap: wrap;
             margin-top: 20px;
+            justify-content: center;
         }
 
         button {
@@ -176,14 +177,14 @@
                 Hz chime. Toggle to "Discrete Mode" to snap to notes like A3 to A5, perfect for melody vibes. The
                 display glows with your color and hums its frequency or note. Hit "Stop Tone" when you're ready to hush
                 it. It's your sonic palette—go wild!</p>
-            <div class="visual-label">Current Note</div>
-            <div id="noteDisplayPaint" class="noteDisplay"></div>
-            <div class="visual-label">Color Gradient Controller</div>
-            <canvas id="gradientCanvas"></canvas>
             <div class="controls">
                 <button id="toggleMode">Discrete Mode</button>
                 <button id="stopTone">Stop Tone</button>
             </div>
+            <div class="visual-label">Crystal Ball</div>
+            <canvas id="gradientCanvas"></canvas>
+            <div class="visual-label">Current Note</div>
+            <div id="noteDisplayPaint" class="noteDisplay"></div>
             <div class="visual-label">Sound Wave Visualizer</div>
             <canvas id="soundWaveCanvasPaint" class="soundWaveCanvas"></canvas>
             <div class="visual-label">Light Spectrum Visualizer</div>
