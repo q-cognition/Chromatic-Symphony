@@ -88,7 +88,7 @@
 
         #sphereContainer {
             width: 100%;
-            height: 400px;
+            height: 600px;
             border-radius: 15px;
             border: 2px solid rgba(255, 255, 255, 0.25);
             background: rgba(0, 0, 0, 0.5);
@@ -266,6 +266,9 @@
                 this.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
                 this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
                 this.sphere = null;
+                this.radius = 4; // Twice as big as original (was 2)
+                this.startColor = new THREE.Color(0xff0000); // Red
+                this.endColor = new THREE.Color(0x0000ff);   // Blue
                 this.setupScene();
                 this.setupSphere();
                 this.setupLights();
@@ -278,16 +281,80 @@
             }
 
             setupSphere() {
-                const geometry = new THREE.SphereGeometry(2, 64, 64);
+                console.log('Creating sphere with radius:', this.radius);
+                const geometry = new THREE.SphereGeometry(this.radius, 64, 64);
+                
+                // Create gradient colors for vertices
+                const colors = [];
+                const positions = geometry.attributes.position;
+                
+                for (let i = 0; i < positions.count; i++) {
+                    const x = positions.getX(i);
+                    const y = positions.getY(i);
+                    const z = positions.getZ(i);
+                    
+                    // Use Y coordinate to create gradient from top to bottom
+                    // Y ranges from -radius to radius, normalize to 0-1
+                    const normalizedY = (y + this.radius) / (2 * this.radius);
+                    const clampedY = Math.max(0, Math.min(1, normalizedY));
+                    
+                    // Interpolate between start and end colors
+                    const color = new THREE.Color();
+                    color.lerpColors(this.startColor, this.endColor, clampedY);
+                    
+                    colors.push(color.r, color.g, color.b);
+                }
+                
+                geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                
                 const material = new THREE.MeshPhongMaterial({
-                    color: 0xffffff,
+                    vertexColors: true,
                     transparent: true,
                     opacity: 0.8,
                     shininess: 100
                 });
+                
                 this.sphere = new THREE.Mesh(geometry, material);
                 this.scene.add(this.sphere);
-                this.camera.position.z = 5;
+                this.camera.position.z = this.radius * 2.5; // Adjust camera distance based on radius
+            }
+
+            setStartColor(color) {
+                this.startColor.set(color);
+                this.updateSphereColors();
+            }
+
+            setEndColor(color) {
+                this.endColor.set(color);
+                this.updateSphereColors();
+            }
+
+            updateSphereColors() {
+                if (!this.sphere) return;
+                
+                const geometry = this.sphere.geometry;
+                const colors = [];
+                const positions = geometry.attributes.position;
+                
+                for (let i = 0; i < positions.count; i++) {
+                    const x = positions.getX(i);
+                    const y = positions.getY(i);
+                    const z = positions.getZ(i);
+                    
+                    // Use Y coordinate to create gradient from top to bottom
+                    // Y ranges from -radius to radius, normalize to 0-1
+                    const normalizedY = (y + this.radius) / (2 * this.radius);
+                    const clampedY = Math.max(0, Math.min(1, normalizedY));
+                    
+                    // Interpolate between start and end colors
+                    const color = new THREE.Color();
+                    color.lerpColors(this.startColor, this.endColor, clampedY);
+                    
+                    colors.push(color.r, color.g, color.b);
+                }
+                
+                geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                geometry.attributes.color.needsUpdate = true;
             }
 
             setupLights() {
@@ -311,13 +378,28 @@
 
             animate() {
                 requestAnimationFrame(() => this.animate());
-                
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            getRadius() {
+                return this.radius;
+            }
+
+            setRadius(newRadius) {
+                this.radius = newRadius;
+                this.recreateSphere();
+            }
+
+            recreateSphere() {
+                // Remove old sphere
                 if (this.sphere) {
-                    this.sphere.rotation.x += 0.005;
-                    this.sphere.rotation.y += 0.01;
+                    this.scene.remove(this.sphere);
+                    this.sphere.geometry.dispose();
+                    this.sphere.material.dispose();
                 }
                 
-                this.renderer.render(this.scene, this.camera);
+                // Create new sphere with new radius
+                this.setupSphere();
             }
 
             resize() {
