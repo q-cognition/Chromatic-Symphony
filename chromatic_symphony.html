@@ -7,6 +7,7 @@
     <title>Chromatic Symphony</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;500&display=swap"
         rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
             --primary-color: #00ffcc;
@@ -85,9 +86,14 @@
             background: rgba(0, 0, 0, 0.5);
         }
 
-        #gradientCanvas {
-            height: 70px;
-            cursor: crosshair;
+        #sphereContainer {
+            width: 100%;
+            height: 400px;
+            border-radius: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            background: rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
         }
 
         .soundWaveCanvas,
@@ -173,7 +179,7 @@
         </section>
         <section class="section">
             <h2>Mission Control</h2>
-            <p>Grab this gradient and paint with your ears! Drag across it—red's a low 220 Hz growl, violet's a high 880
+            <p>Interact with this 3D sphere and paint with your ears! Click and drag on the sphere—red's a low 220 Hz growl, violet's a high 880
                 Hz chime. Toggle to "Discrete Mode" to snap to notes like A3 to A5, perfect for melody vibes. The
                 display glows with your color and hums its frequency or note. Hit "Stop Tone" when you're ready to hush
                 it. It's your sonic palette—go wild!</p>
@@ -181,8 +187,8 @@
                 <button id="toggleMode">Discrete Mode</button>
                 <button id="stopTone">Stop Tone</button>
             </div>
-            <div class="visual-label">Crystal Ball</div>
-            <canvas id="gradientCanvas"></canvas>
+            <div class="visual-label">Crystal Sphere</div>
+            <div id="sphereContainer"></div>
             <div class="visual-label">Current Note</div>
             <div id="noteDisplayPaint" class="noteDisplay"></div>
             <div class="visual-label">Sound Wave Visualizer</div>
@@ -201,22 +207,15 @@
             NOTES: ['A3', 'A#3', 'B3', 'C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4', 'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5'],
             MIN_FREQ: 220,
             MAX_FREQ: 880,
-            CANVAS_WIDTH: Math.min(1000, window.innerWidth * 0.8),
             GAIN_VALUE: 0.4
         };
 
         // State management
         class AppState {
             constructor() {
-                this.isInteracting = false;
-                this.currentX = 0;
                 this.mode = 'continuous';
                 this.lastFreq = null;
                 this.lastColor = null;
-            }
-
-            updatePosition(x, canvasWidth) {
-                this.currentX = Math.max(0, Math.min(x, canvasWidth));
             }
 
             toggleMode() {
@@ -259,19 +258,86 @@
             }
         }
 
+        // 3D Sphere handling
+        class SphereManager {
+            constructor(container) {
+                this.container = container;
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.sphere = null;
+                this.setupScene();
+                this.setupSphere();
+                this.setupLights();
+                this.setupRenderer();
+                this.animate();
+            }
+
+            setupScene() {
+                this.scene.background = new THREE.Color(0x0a0a0a);
+            }
+
+            setupSphere() {
+                const geometry = new THREE.SphereGeometry(2, 64, 64);
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.8,
+                    shininess: 100
+                });
+                this.sphere = new THREE.Mesh(geometry, material);
+                this.scene.add(this.sphere);
+                this.camera.position.z = 5;
+            }
+
+            setupLights() {
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 5, 5);
+                this.scene.add(directionalLight);
+
+                const pointLight = new THREE.PointLight(0x00ffcc, 1, 100);
+                pointLight.position.set(-5, 5, 5);
+                this.scene.add(pointLight);
+            }
+
+            setupRenderer() {
+                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.container.appendChild(this.renderer.domElement);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                if (this.sphere) {
+                    this.sphere.rotation.x += 0.005;
+                    this.sphere.rotation.y += 0.01;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            resize() {
+                const width = this.container.clientWidth;
+                const height = this.container.clientHeight;
+                
+                this.camera.aspect = width / height;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(width, height);
+            }
+        }
+
         // Visualization handling
         class Visualizer {
             constructor() {
                 this.initializeElements();
-                this.setupGradient();
                 this.setupCanvases();
-                this.attachGradientEvents();
             }
 
             initializeElements() {
-                this.gradientCanvas = document.getElementById('gradientCanvas');
-                this.gradientCanvas.width = CONFIG.CANVAS_WIDTH;
-                this.ctx = this.gradientCanvas.getContext('2d');
                 this.canvases = {
                     soundWave: [
                         document.getElementById('soundWaveCanvasPaint')
@@ -285,29 +351,16 @@
                 };
             }
 
-            setupGradient() {
-                const gradient = this.ctx.createLinearGradient(0, 0, this.gradientCanvas.width, 0);
-                gradient.addColorStop(0, 'red');
-                gradient.addColorStop(0.16, 'orange');
-                gradient.addColorStop(0.33, 'yellow');
-                gradient.addColorStop(0.5, 'green');
-                gradient.addColorStop(0.66, 'blue');
-                gradient.addColorStop(0.83, 'indigo');
-                gradient.addColorStop(1, 'violet');
-                this.ctx.fillStyle = gradient;
-                this.ctx.fillRect(0, 0, this.gradientCanvas.width, this.gradientCanvas.height);
-            }
-
             setupCanvases() {
                 this.canvases.soundWave.forEach(canvas => {
                     if (canvas) {
-                        canvas.width = CONFIG.CANVAS_WIDTH;
+                        canvas.width = canvas.clientWidth;
                         canvas.height = 150;
                     }
                 });
                 this.canvases.lightSpectrum.forEach(canvas => {
                     if (canvas) {
-                        canvas.width = CONFIG.CANVAS_WIDTH;
+                        canvas.width = canvas.clientWidth;
                         canvas.height = 150;
                         this.drawLightSpectrumBackground(canvas);
                     }
@@ -330,8 +383,7 @@
 
             updateAll(freq, color, mode) {
                 if (!freq || !color) return;
-                const x = state.currentX / this.gradientCanvas.width;
-                const noteText = mode === 'continuous' ? `${freq.toFixed(0)} Hz` : CONFIG.NOTES[Math.round((CONFIG.NOTES.length - 1) * x)];
+                const noteText = mode === 'continuous' ? `${freq.toFixed(0)} Hz` : CONFIG.NOTES[Math.round((CONFIG.NOTES.length - 1) * (freq - CONFIG.MIN_FREQ) / (CONFIG.MAX_FREQ - CONFIG.MIN_FREQ))];
                 this.canvases.soundWave.forEach(canvas => {
                     if (canvas) this.updateSoundWave(canvas, freq, color);
                 });
@@ -375,109 +427,28 @@
                 ctx.font = '12px Orbitron';
                 ctx.fillText(`${freq.toFixed(0)} Hz`, x + 10, canvas.height / 2);
             }
-
-            getColorAtX(x) {
-                const safeX = Math.min(Math.max(0, Math.floor(x)), this.gradientCanvas.width - 1);
-                const imageData = this.ctx.getImageData(safeX, 0, 1, 1).data;
-                return `rgb(${imageData[0]}, ${imageData[1]}, ${imageData[2]})`;
-            }
-
-            attachGradientEvents() {
-                this.gradientCanvas.removeEventListener('mousedown', this.handleGradientMouseDown);
-                this.gradientCanvas.removeEventListener('mousemove', this.handleGradientMouseMove);
-                this.gradientCanvas.removeEventListener('mouseup', this.handleGradientMouseUp);
-                this.gradientCanvas.removeEventListener('touchstart', this.handleGradientTouchStart);
-                this.gradientCanvas.removeEventListener('touchmove', this.handleGradientTouchMove);
-                this.gradientCanvas.removeEventListener('touchend', this.handleGradientTouchEnd);
-
-                this.handleGradientMouseDown = (e) => startInteraction(e, this.gradientCanvas);
-                this.handleGradientMouseMove = (e) => moveInteraction(e, this.gradientCanvas);
-                this.handleGradientMouseUp = endInteraction;
-                this.handleGradientTouchStart = (e) => startInteraction(e, this.gradientCanvas);
-                this.handleGradientTouchMove = (e) => moveInteraction(e, this.gradientCanvas);
-                this.handleGradientTouchEnd = endInteraction;
-
-                this.gradientCanvas.addEventListener('mousedown', this.handleGradientMouseDown);
-                this.gradientCanvas.addEventListener('mousemove', this.handleGradientMouseMove);
-                this.gradientCanvas.addEventListener('mouseup', this.handleGradientMouseUp);
-                this.gradientCanvas.addEventListener('touchstart', this.handleGradientTouchStart);
-                this.gradientCanvas.addEventListener('touchmove', this.handleGradientTouchMove);
-                this.gradientCanvas.addEventListener('touchend', this.handleGradientTouchEnd);
-            }
         }
 
         // Initialize
         const state = new AppState();
         const audio = new AudioManager();
         const viz = new Visualizer();
-
-        function getFrequency(x, mode) {
-            const ratio = x / viz.gradientCanvas.width;
-            return mode === 'continuous'
-                ? CONFIG.MIN_FREQ * Math.pow(2, 2 * ratio)
-                : CONFIG.MIN_FREQ * Math.pow(2, Math.round((CONFIG.NOTES.length - 1) * ratio) / 12);
-        }
-
-        function startInteraction(e, canvas) {
-            state.isInteracting = true;
-            updatePosition(e, canvas);
-            const freq = getFrequency(state.currentX, state.mode);
-            audio.playTone(freq);
-            state.lastFreq = freq;
-            state.lastColor = viz.getColorAtX(state.currentX);
-            viz.updateAll(state.lastFreq, state.lastColor, state.mode);
-        }
-
-        function moveInteraction(e, canvas) {
-            if (!state.isInteracting) return;
-            updatePosition(e, canvas);
-            const freq = getFrequency(state.currentX, state.mode);
-            if (audio.oscillators.length) {
-                audio.oscillators[0].frequency.setValueAtTime(freq, audio.audioCtx.currentTime);
-                audio.oscillators[1].frequency.setValueAtTime(freq * 1.02, audio.audioCtx.currentTime);
-            }
-            state.lastFreq = freq;
-            state.lastColor = viz.getColorAtX(state.currentX);
-            viz.updateAll(state.lastFreq, state.lastColor, state.mode);
-        }
-
-        function endInteraction() {
-            state.isInteracting = false;
-            audio.stopTone();
-        }
-
-        function updatePosition(e, canvas) {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const offsetX = clientX - rect.left;
-            state.updatePosition(offsetX, rect.width);
-        }
+        const sphere = new SphereManager(document.getElementById('sphereContainer'));
 
         // Controls
         document.getElementById('toggleMode').addEventListener('click', () => {
             state.toggleMode();
             document.getElementById('toggleMode').textContent = `${state.mode === 'continuous' ? 'Discrete' : 'Continuous'} Mode`;
-            if (state.lastFreq && state.lastColor) {
-                const freq = getFrequency(state.currentX, state.mode);
-                state.lastFreq = freq;
-                viz.updateAll(state.lastFreq, state.lastColor, state.mode);
-            }
         });
 
         document.getElementById('stopTone').addEventListener('click', () => {
             audio.stopTone();
-            state.isInteracting = false;
         });
 
-        // Monitor DOM changes
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
-                if (mutation.type === 'childList' && mutation.target.tagName === 'MAIN') {
-                    viz.attachGradientEvents();
-                }
-            });
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            sphere.resize();
         });
-        observer.observe(document.querySelector('main'), { childList: true, subtree: true });
     </script>
 </body>
 
