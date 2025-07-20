@@ -199,6 +199,7 @@
             <div class="controls">
                 <button id="toggleMode">Discrete Mode</button>
                 <button id="stopTone">Stop Tone</button>
+                <button id="toggleQuantum">Start Quantum Colors</button>
             </div>
             <div class="visual-label">Crystal Sphere</div>
             <div id="sphereContainer"></div>
@@ -226,8 +227,121 @@
             NOTES: ['A3', 'A#3', 'B3', 'C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4', 'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5'],
             MIN_FREQ: 220,
             MAX_FREQ: 880,
-            GAIN_VALUE: 0.4
+            GAIN_VALUE: 0.4,
+            API_URL: 'http://localhost:5000/api/quantum_colors/generate?num_colors=1&color_space=rgb',
+            API_INTERVAL: 0
         };
+
+        // Quantum Color Management
+        class QuantumColorManager {
+            constructor(sphereManager) {
+                this.sphereManager = sphereManager;
+                this.isRunning = false;
+                this.intervalId = null;
+                this.lastColor = null;
+                this.currentColor = null;
+            }
+
+            /**
+             * Starts the continuous API loop for quantum color generation
+             * Based on Scott Wilber's expertise in quantum random number generation
+             * and its application in artistic color generation
+             */
+            start() {
+                if (this.isRunning) return;
+                
+                this.isRunning = true;
+                console.log('Starting quantum color generation loop...');
+                
+                // Make initial API call
+                this.fetchAndUpdateColors();
+                
+                // Set up the interval for continuous calls
+                this.intervalId = setInterval(() => {
+                    this.fetchAndUpdateColors();
+                }, CONFIG.API_INTERVAL);
+            }
+
+            /**
+             * Stops the continuous API loop
+             */
+            stop() {
+                if (!this.isRunning) return;
+                
+                this.isRunning = false;
+                if (this.intervalId) {
+                    clearInterval(this.intervalId);
+                    this.intervalId = null;
+                }
+                console.log('Stopped quantum color generation loop');
+            }
+
+            /**
+             * Fetches quantum colors from API and updates sphere colors
+             * Implements the specified loop logic:
+             * 1. First call -> extract RGB array -> set as sphere's start color
+             * 2. Second call -> extract RGB array -> set sphere's end color to first color, start color to new color
+             * 3. Repeat loop
+             */
+            async fetchAndUpdateColors() {
+                try {
+                    const response = await fetch(CONFIG.API_URL);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Quantum API response:', data);
+                    
+                    if (data.colors && data.colors.length > 0) {
+                        const rgbArray = data.colors[0];
+                        const hexColor = this.rgbToHex(rgbArray[0], rgbArray[1], rgbArray[2]);
+                        
+                        // Apply the specified color update logic
+                        if (this.lastColor === null) {
+                            // First call: set as start color
+                            this.lastColor = hexColor;
+                            this.sphereManager.setStartColor(hexColor);
+                            console.log('Set initial start color:', hexColor);
+                        } else {
+                            // Subsequent calls: update colors according to loop logic
+                            this.currentColor = hexColor;
+                            this.sphereManager.setEndColor(this.lastColor); // Set end color to previous start color
+                            this.sphereManager.setStartColor(this.currentColor); // Set start color to new color
+                            this.lastColor = this.currentColor;
+                            console.log('Updated colors - End:', this.lastColor, 'Start:', this.currentColor);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching quantum colors:', error);
+                }
+            }
+
+            /**
+             * Converts RGB values to hex color string
+             * @param {number} r - Red value (0-255)
+             * @param {number} g - Green value (0-255)
+             * @param {number} b - Blue value (0-255)
+             * @returns {string} Hex color string
+             */
+            rgbToHex(r, g, b) {
+                return '#' + [r, g, b].map(x => {
+                    const hex = x.toString(16);
+                    return hex.length === 1 ? '0' + hex : hex;
+                }).join('');
+            }
+
+            /**
+             * Toggles the quantum color generation on/off
+             */
+            toggle() {
+                if (this.isRunning) {
+                    this.stop();
+                } else {
+                    this.start();
+                }
+            }
+        }
 
         // State management
         class AppState {
@@ -388,16 +502,16 @@
             }
 
             setupLights() {
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-                this.scene.add(ambientLight);
+                // const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                // this.scene.add(ambientLight);
 
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
                 directionalLight.position.set(5, 5, 5);
                 this.scene.add(directionalLight);
 
-                const pointLight = new THREE.PointLight(0x00ffcc, 1, 100);
-                pointLight.position.set(-5, 5, 5);
-                this.scene.add(pointLight);
+                // const pointLight = new THREE.PointLight(0x00ffcc, 1, 100);
+                // pointLight.position.set(-5, 5, 5);
+                // this.scene.add(pointLight);
             }
 
             setupRenderer() {
@@ -546,6 +660,7 @@
         const audio = new AudioManager();
         const viz = new Visualizer();
         const sphere = new SphereManager(document.getElementById('sphereContainer'));
+        const quantumManager = new QuantumColorManager(sphere);
 
         // Controls
         document.getElementById('toggleMode').addEventListener('click', () => {
@@ -555,6 +670,12 @@
 
         document.getElementById('stopTone').addEventListener('click', () => {
             audio.stopTone();
+        });
+
+        document.getElementById('toggleQuantum').addEventListener('click', () => {
+            quantumManager.toggle();
+            const button = document.getElementById('toggleQuantum');
+            button.textContent = quantumManager.isRunning ? 'Stop Quantum Colors' : 'Start Quantum Colors';
         });
 
         // Handle window resize
